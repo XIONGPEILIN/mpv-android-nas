@@ -31,6 +31,7 @@ import java.io.FileFilter
 class FilePickerActivity : AppCompatActivity(), AbstractFilePickerFragment.OnFilePickedListener {
     private var fragment: MPVFilePickerFragment? = null
     private var fragment2: MPVDocumentPickerFragment? = null
+    private var nasFragment: NasFragment? = null
 
     private var lastSeenInsets: WindowInsets? = null
 
@@ -242,6 +243,16 @@ class FilePickerActivity : AppCompatActivity(), AbstractFilePickerFragment.OnFil
         }
     }
 
+    fun initNasPicker() {
+        nasFragment = NasFragment()
+        with(supportFragmentManager.beginTransaction()) {
+            setReorderingAllowed(true)
+            replace(R.id.fragment_container_view, nasFragment!!)
+            addToBackStack(null)
+            commit()
+        }
+    }
+
     override fun dispatchKeyEvent(ev: KeyEvent): Boolean {
         // If up is pressed at the header element display the usual options menu as a popup menu
         // to make it usable on Android TV.
@@ -306,17 +317,27 @@ class FilePickerActivity : AppCompatActivity(), AbstractFilePickerFragment.OnFil
     }
 
     private fun onBackPressedImpl() {
+        nasFragment?.apply {
+            if (isVisible && canGoUp()) {
+                goUp()
+                return
+            }
+        }
         fragment?.apply {
-            if (!isBackTop) {
+            if (isVisible && !isBackTop) {
                 goUp()
                 return
             }
         }
         fragment2?.apply {
-            if (!isBackTop) {
+            if (isVisible && !isBackTop) {
                 goUp()
                 return
             }
+        }
+        if (supportFragmentManager.backStackEntryCount > 0) {
+            supportFragmentManager.popBackStack()
+            return
         }
         finishWithResult(RESULT_CANCELED)
     }
@@ -373,6 +394,9 @@ class FilePickerActivity : AppCompatActivity(), AbstractFilePickerFragment.OnFil
             binding.urlBtn.setOnClickListener {
                 // leave visible, dialog will exit anyway
                 (activity as FilePickerActivity).showUrlDialog()
+            }
+            binding.nasBtn.setOnClickListener {
+                (activity as FilePickerActivity).initNasPicker()
             }
             binding.docBtn.setOnClickListener {
                 (activity as FilePickerActivity).documentOpener.launch(arrayOf("*/*"))

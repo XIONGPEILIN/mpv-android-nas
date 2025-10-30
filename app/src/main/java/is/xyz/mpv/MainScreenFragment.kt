@@ -99,6 +99,10 @@ class MainScreenFragment : Fragment(R.layout.fragment_main_screen) {
                 i.putExtra("default_path", lastPath)
             filePickerLauncher.launch(i)
         }
+        binding.nasBtn.setOnClickListener {
+            saveChoice("nas")
+            openNasBrowser()
+        }
         binding.settingsBtn.setOnClickListener {
             saveChoice("") // will reset
             startActivity(Intent(context, PreferenceActivity::class.java))
@@ -189,6 +193,7 @@ class MainScreenFragment : Fragment(R.layout.fragment_main_screen) {
             }
             "url" -> binding.urlBtn.callOnClick()
             "file" -> binding.filepickerBtn.callOnClick()
+            "nas" -> openNasBrowser()
         }
     }
 
@@ -202,6 +207,20 @@ class MainScreenFragment : Fragment(R.layout.fragment_main_screen) {
         }
         i.setClass(requireContext(), MPVActivity::class.java)
         playerLauncher.launch(i)
+    }
+
+    private fun openNasBrowser() {
+        parentFragmentManager.beginTransaction()
+            .setReorderingAllowed(true)
+            .setCustomAnimations(
+                android.R.animator.fade_in,
+                android.R.animator.fade_out,
+                android.R.animator.fade_in,
+                android.R.animator.fade_out
+            )
+            .replace(R.id.fragment_container_view, NasFragment())
+            .addToBackStack("nas")
+            .commit()
     }
 
     companion object {

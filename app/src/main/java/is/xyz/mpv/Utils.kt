@@ -516,4 +516,9 @@ internal object Utils {
         "file", "content", "http", "https", "data", "ftp",
         "rtmp", "rtmps", "rtp", "rtsp", "mms", "mmst", "mmsh", "tcp", "udp", "lavf"
     )
+
+    fun isNativePlayerAvailable(context: Context): Boolean {
+        val nativeDir = context.applicationInfo.nativeLibraryDir ?: return false
+        return File(nativeDir, "libmpv.so").exists()
+    }
 }

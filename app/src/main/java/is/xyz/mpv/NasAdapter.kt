@@ -35,7 +35,7 @@ class NasAdapter(
         fun bind(item: NasItem) {
             binding.fileNameTextView.text = item.name
             binding.fileTypeImageView.setImageResource(
-                if (item.isDirectory) R.drawable.ic_folder_24dp
+                if (item.isDirectory) R.drawable.ic_folder_white_48dp
                 else R.drawable.ic_file_24dp
             )
             binding.root.setOnClickListener { onItemClick(item) }

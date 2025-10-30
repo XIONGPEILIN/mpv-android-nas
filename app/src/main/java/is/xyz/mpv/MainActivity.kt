@@ -13,6 +13,11 @@ class MainActivity : AppCompatActivity(R.layout.activity_main) {
         // under here but that requires refactoring I'm really not willing to figure out now.
         // ~sfan5, 2022-06-30
 
+        supportFragmentManager.addOnBackStackChangedListener {
+            updateActionBarBackButton()
+        }
+        updateActionBarBackButton()
+
         if (savedInstanceState == null) {
             with (supportFragmentManager.beginTransaction()) {
                 setReorderingAllowed(true)
@@ -20,5 +25,15 @@ class MainActivity : AppCompatActivity(R.layout.activity_main) {
                 commit()
             }
         }
+    }
+
+    override fun onSupportNavigateUp(): Boolean {
+        onBackPressedDispatcher.onBackPressed()
+        return true
+    }
+
+    private fun updateActionBarBackButton() {
+        val hasBackStack = supportFragmentManager.backStackEntryCount > 0
+        supportActionBar?.setDisplayHomeAsUpEnabled(hasBackStack)
     }
 }

@@ -38,6 +38,7 @@ import androidx.annotation.IdRes
 import androidx.annotation.LayoutRes
 import androidx.annotation.RequiresApi
 import androidx.annotation.StringRes
+import java.util.ArrayList
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -298,6 +299,7 @@ class MPVActivity : AppCompatActivity(), MPVLib.EventObserver, TouchGesturesObse
         player.addObserver(this)
         player.initialize(filesDir.path, cacheDir.path)
         player.playFile(filepath)
+        enqueuePlaylistFromIntent(intent, filepath)
 
         mediaSession = initMediaSession()
         updateMediaSession()
@@ -995,6 +997,40 @@ class MPVActivity : AppCompatActivity(), MPVLib.EventObserver, TouchGesturesObse
             setGravity(Gravity.TOP or Gravity.CENTER_HORIZONTAL, 0, 0)
             show()
         }
+    }
+
+    private fun enqueuePlaylistFromIntent(intent: Intent, primaryPath: String) {
+        val entries = intent.getStringArrayExtra("playlist")
+        if (entries == null || entries.isEmpty()) {
+            intent.removeExtra("playlist")
+            intent.removeExtra("playlist-start-index")
+            return
+        }
+
+        val boundedIndex = if (entries.size == 1) 0 else {
+            intent.getIntExtra("playlist-start-index", 0).coerceIn(0, entries.lastIndex)
+        }
+
+        val ordered = ArrayList<String>(entries.size - 1)
+        for (i in boundedIndex + 1 until entries.size) {
+            val path = entries[i]
+            if (path != primaryPath) {
+                ordered.add(path)
+            }
+        }
+        for (i in 0 until boundedIndex) {
+            val path = entries[i]
+            if (path != primaryPath) {
+                ordered.add(path)
+            }
+        }
+
+        ordered
+            .distinct()
+            .forEach { MPVLib.command(arrayOf("loadfile", it, "append")) }
+
+        intent.removeExtra("playlist")
+        intent.removeExtra("playlist-start-index")
     }
 
     // Intent/Uri parsing

@@ -11,10 +11,14 @@ if [ "$os" == "linux" ]; then
 	if [ $IN_CI -eq 0 ]; then
 		if hash yum &>/dev/null; then
 			sudo yum install autoconf pkgconfig libtool ninja-build \
-				unzip wget meson
+				unzip wget meson bzip2 xz git
 		elif apt-get -v &>/dev/null; then
 			sudo apt-get install autoconf pkg-config libtool ninja-build \
-				unzip wget meson
+				unzip wget meson bzip2 xz-utils git || {
+				echo "Failed to install build dependencies via apt-get." >&2
+				echo "If you are on Ubuntu, run 'sudo add-apt-repository universe' followed by 'sudo apt-get update' and rerun this script, or install meson/ninja manually." >&2
+				exit 1
+			}
 		else
 			echo "Note: dependencies were not installed, you have to do that manually."
 		fi
