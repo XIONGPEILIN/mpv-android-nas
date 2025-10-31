@@ -301,7 +301,10 @@ class MPVActivity : AppCompatActivity(), MPVLib.EventObserver, TouchGesturesObse
 
         player.addObserver(this)
         player.initialize(filesDir.path, cacheDir.path)
-        enqueuePlaylistFromIntent(intent, filepath)
+        player.playFile(filepath)
+        // Save intent and filepath for playlist enqueueing in event handler
+        pendingIntent = intent
+        pendingFilepath = filepath
 
         mediaSession = initMediaSession()
         updateMediaSession()
@@ -1037,7 +1040,7 @@ class MPVActivity : AppCompatActivity(), MPVLib.EventObserver, TouchGesturesObse
 
         ordered.forEach { entry ->
             val args = mutableListOf("loadfile", entry.url, "append")
-            entry.title?.takeIf { it.isNotEmpty() }?.let { args.add("force-media-title=$it") }
+            Log.d(TAG, "Enqueueing playlist item: ${entry.url}")
             MPVLib.command(args.toTypedArray())
         }
 
@@ -1986,6 +1989,17 @@ class MPVActivity : AppCompatActivity(), MPVLib.EventObserver, TouchGesturesObse
             playbackHasStarted = true
         }
 
+        if (eventId == MpvEvent.MPV_EVENT_FILE_LOADED) {
+            // Enqueue playlist after file has loaded
+            pendingIntent?.let { intent ->
+                pendingFilepath?.let { filepath ->
+                    enqueuePlaylistFromIntent(intent, filepath)
+                    pendingIntent = null
+                    pendingFilepath = null
+                }
+            }
+        }
+
         if (!activityIsForeground) return
         eventUiHandler.post { eventUi(eventId) }
     }
@@ -2121,4 +2135,7 @@ class MPVActivity : AppCompatActivity(), MPVLib.EventObserver, TouchGesturesObse
         // precision used by seekbar (1/s)
         private const val SEEK_BAR_PRECISION = 2
     }
+
+    private var pendingIntent: Intent? = null
+    private var pendingFilepath: String? = null
 }

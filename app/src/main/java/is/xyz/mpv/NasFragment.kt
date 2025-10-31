@@ -214,7 +214,7 @@ class NasFragment : Fragment(R.layout.fragment_nas) {
 
                 val media = entries.filter { file ->
                     val extension = file.name.substringAfterLast('.', "").lowercase()
-                    Utils.MEDIA_EXTENSIONS.contains(extension)
+                    Utils.VIDEO_EXTENSIONS.contains(extension)
                 }
                 val subtitles = entries.filter { file ->
                     val extension = file.name.substringAfterLast('.', "").lowercase()

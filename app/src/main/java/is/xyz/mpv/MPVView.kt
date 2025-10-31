@@ -118,6 +118,9 @@ internal class MPVView(context: Context, attrs: AttributeSet) : BaseMPVView(cont
     override fun postInitOptions() {
         // we need to call write-watch-later manually
         MPVLib.setOptionString("save-position-on-quit", "no")
+        // keep window open when playlist ends
+        MPVLib.setOptionString("keep-open", "yes")
+        MPVLib.setOptionString("keep-open-playlist", "yes")
     }
 
     fun onPointerEvent(event: MotionEvent): Boolean {
