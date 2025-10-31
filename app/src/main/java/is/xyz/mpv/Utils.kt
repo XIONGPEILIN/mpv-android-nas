@@ -511,6 +511,23 @@ internal object Utils {
             "jpg2", "png", "tga", "tif", "tiff", "webp",
     )
 
+    val SUBTITLE_EXTENSIONS = setOf(
+            "ass", "dfxp", "idx", "lrc", "mpl", "mpl2", "pjs", "psb", "rt",
+            "sami", "scc", "smi", "srt", "ssa", "sub", "sup", "ttml", "usf", "vtt"
+    )
+
+    val VIDEO_EXTENSIONS = setOf(
+            "264", "265", "3g2", "3ga", "3gp", "3gp2", "3gpp", "3gpp2", "3iv", "amr", "asf",
+            "asx", "av1", "avc", "avf", "avi", "bdm", "bdmv", "clpi", "cpi", "divx", "dv", "evo",
+            "evob", "f4v", "flc", "fli", "flic", "flv", "gxf", "h264", "h265", "hdmov", "hdv",
+            "hevc", "lrv", "m1u", "m1v", "m2t", "m2ts", "m2v", "m4u", "m4v", "mkv", "mod", "moov",
+            "mov", "mp2", "mp2v", "mp4", "mp4v", "mpe", "mpeg", "mpeg2", "mpeg4", "mpg", "mpg4",
+            "mpl", "mpls", "mpv", "mpv2", "mts", "mtv", "mxf", "mxu", "nsv", "nut", "ogg", "ogm",
+            "ogv", "ogx", "qt", "qtvr", "rm", "rmj", "rmm", "rms", "rmvb", "rmx", "rv", "rvx",
+            "sdp", "tod", "trp", "ts", "tsa", "tsv", "tts", "vc1", "vfw", "vob", "vro", "webm",
+            "wm", "wmv", "wmx", "x264", "x265", "xvid", "y4m", "yuv"
+    )
+
     // cf. AndroidManifest.xml and MPVActivity.resolveUri()
     val PROTOCOLS = setOf(
         "file", "content", "http", "https", "data", "ftp",

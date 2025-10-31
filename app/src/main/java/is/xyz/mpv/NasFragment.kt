@@ -16,6 +16,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import `is`.xyz.mpv.databinding.DialogNasCredentialsBinding
 import `is`.xyz.mpv.databinding.FragmentNasBinding
+import `is`.xyz.mpv.network.SmbHttpProxy
 import jcifs.CIFSContext
 import jcifs.context.SingletonContext
 import jcifs.smb.NtlmPasswordAuthentication
@@ -24,6 +25,7 @@ import jcifs.smb.SmbFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.ArrayList
 
 class NasFragment : Fragment(R.layout.fragment_nas) {
     private lateinit var binding: FragmentNasBinding
@@ -202,18 +204,27 @@ class NasFragment : Fragment(R.layout.fragment_nas) {
     private fun playFiles(item: NasItem) {
         val context = cifsContext ?: return
         viewLifecycleOwner.lifecycleScope.launch {
-            val playlist: List<String> = withContext(Dispatchers.IO) {
-                val path = currentPath ?: return@withContext emptyList()
+            val listing = withContext(Dispatchers.IO) {
+                val path = currentPath ?: return@withContext DirectoryScanResult(emptyList(), emptyList())
                 val directory = SmbFile(path, context)
-                directory.listFiles()
-                    ?.filter { file ->
-                        val extension = file.name.substringAfterLast('.', "").lowercase()
-                        !file.isDirectory && Utils.MEDIA_EXTENSIONS.contains(extension)
-                    }
+                val entries = directory.listFiles()
+                    ?.filter { !it.isDirectory }
                     ?.sortedBy { it.name.lowercase() }
-                    ?.map { it.path }
                     ?: emptyList()
+
+                val media = entries.filter { file ->
+                    val extension = file.name.substringAfterLast('.', "").lowercase()
+                    Utils.MEDIA_EXTENSIONS.contains(extension)
+                }
+                val subtitles = entries.filter { file ->
+                    val extension = file.name.substringAfterLast('.', "").lowercase()
+                    Utils.SUBTITLE_EXTENSIONS.contains(extension)
+                }
+                DirectoryScanResult(media, subtitles)
             }
+
+            val playlist = listing.mediaFiles
+            val subtitleFiles = listing.subtitleFiles
 
             if (playlist.isEmpty()) {
                 Toast.makeText(requireContext(), R.string.nas_error_no_media, Toast.LENGTH_SHORT).show()
@@ -225,11 +236,58 @@ class NasFragment : Fragment(R.layout.fragment_nas) {
                 return@launch
             }
 
-            val startIndex = playlist.indexOfFirst { it == item.smbFile.path }.takeIf { it >= 0 } ?: 0
+            val subtitleEntries = subtitleFiles.map { file ->
+                val name = file.name.trimEnd('/')
+                SubtitleProxy(name, SmbHttpProxy.register(context, file.path, name))
+            }
+            val subtitlesByMedia = mutableMapOf<String, List<String>>()
+            val subtitlesToEnable = mutableMapOf<String, List<String>>()
+
+            val startIndex = playlist.indexOfFirst { it.path == item.smbFile.path }.takeIf { it >= 0 } ?: 0
+            val proxyEntries = playlist.map { smb ->
+                val url = SmbHttpProxy.register(context, smb.path, smb.name.trimEnd('/'))
+                val title = smb.name.trimEnd('/')
+                if (subtitleEntries.isNotEmpty()) {
+                    val matches = subtitleEntries.filter { isSubtitleMatch(title, it.name) }
+                    val selected = if (matches.isNotEmpty()) matches else subtitleEntries
+                    if (selected.isNotEmpty()) {
+                        subtitlesByMedia[url] = selected.map { it.url }
+                        matches.firstOrNull()?.let {
+                            subtitlesToEnable[url] = listOf(it.url)
+                        }
+                    }
+                }
+                ProxyEntry(url, title)
+            }
             val intent = Intent(requireContext(), MPVActivity::class.java).apply {
-                putExtra("filepath", playlist[startIndex])
-                putExtra("playlist", playlist.toTypedArray())
+                putExtra("filepath", proxyEntries[startIndex].url)
+                putExtra("playlist", proxyEntries.map { it.url }.toTypedArray())
                 putExtra("playlist-start-index", startIndex)
+                putExtra("playlist-titles", proxyEntries.map { it.title }.toTypedArray())
+                putExtra("title", proxyEntries[startIndex].title)
+
+                if (subtitlesByMedia.isNotEmpty()) {
+                    val subsBundle = Bundle()
+                    subtitlesByMedia.forEach { (key, value) ->
+                        if (value.isNotEmpty()) {
+                            subsBundle.putStringArrayList(key, ArrayList(value))
+                        }
+                    }
+                    if (!subsBundle.isEmpty) {
+                        putExtra("playlist-subs", subsBundle)
+                    }
+                }
+                if (subtitlesToEnable.isNotEmpty()) {
+                    val enableBundle = Bundle()
+                    subtitlesToEnable.forEach { (key, value) ->
+                        if (value.isNotEmpty()) {
+                            enableBundle.putStringArrayList(key, ArrayList(value))
+                        }
+                    }
+                    if (!enableBundle.isEmpty) {
+                        putExtra("playlist-subs-enable", enableBundle)
+                    }
+                }
             }
             startActivity(intent)
         }
@@ -297,3 +355,35 @@ private data class SavedNasSession(
     val password: String,
     val lastPath: String?
 )
+
+private data class ProxyEntry(
+    val url: String,
+    val title: String
+)
+
+private data class DirectoryScanResult(
+    val mediaFiles: List<SmbFile>,
+    val subtitleFiles: List<SmbFile>
+)
+
+private data class SubtitleProxy(
+    val name: String,
+    val url: String
+)
+
+private fun isSubtitleMatch(videoName: String, subtitleName: String): Boolean {
+    val videoStem = videoName.substringBeforeLast('.', videoName).lowercase()
+    val subtitleStem = subtitleName.substringBeforeLast('.', subtitleName).lowercase()
+    if (videoStem == subtitleStem) {
+        return true
+    }
+    if (!subtitleStem.startsWith(videoStem)) {
+        return false
+    }
+    val remainder = subtitleStem.removePrefix(videoStem)
+    if (remainder.isEmpty()) {
+        return true
+    }
+    val leading = remainder.first()
+    return leading == '.' || leading == '-' || leading == '_' || leading == ' ' || leading == '[' || leading == '('
+}

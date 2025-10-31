@@ -242,6 +242,11 @@ class MPVActivity : AppCompatActivity(), MPVLib.EventObserver, TouchGesturesObse
 
     private var playbackHasStarted = false
     private var onloadCommands = mutableListOf<Array<String>>()
+    private data class SubtitleConfig(
+        val urls: List<String>,
+        val enabled: Set<String>
+    )
+    private var playlistSubtitleConfig: Map<String, SubtitleConfig> = emptyMap()
 
     // Activity lifetime
 
@@ -285,9 +290,7 @@ class MPVActivity : AppCompatActivity(), MPVLib.EventObserver, TouchGesturesObse
 
         // Parse the intent
         val filepath = parsePathFromIntent(intent)
-        if (intent.action == Intent.ACTION_VIEW) {
-            parseIntentExtras(intent.extras)
-        }
+        parseIntentExtras(intent.extras)
 
         if (filepath == null) {
             Log.e(TAG, "No file given, exiting")
@@ -298,7 +301,6 @@ class MPVActivity : AppCompatActivity(), MPVLib.EventObserver, TouchGesturesObse
 
         player.addObserver(this)
         player.initialize(filesDir.path, cacheDir.path)
-        player.playFile(filepath)
         enqueuePlaylistFromIntent(intent, filepath)
 
         mediaSession = initMediaSession()
@@ -359,6 +361,7 @@ class MPVActivity : AppCompatActivity(), MPVLib.EventObserver, TouchGesturesObse
 
         // Happens when mpv is still running (not necessarily playing) and the user selects a new
         // file to be played from another app
+        parseIntentExtras(intent?.extras)
         val filepath = intent?.let { parsePathFromIntent(it) }
         if (filepath == null) {
             return
@@ -1004,33 +1007,45 @@ class MPVActivity : AppCompatActivity(), MPVLib.EventObserver, TouchGesturesObse
         if (entries == null || entries.isEmpty()) {
             intent.removeExtra("playlist")
             intent.removeExtra("playlist-start-index")
+            intent.removeExtra("playlist-titles")
             return
         }
+        val titles = intent.getStringArrayExtra("playlist-titles")
 
         val boundedIndex = if (entries.size == 1) 0 else {
             intent.getIntExtra("playlist-start-index", 0).coerceIn(0, entries.lastIndex)
         }
 
-        val ordered = ArrayList<String>(entries.size - 1)
-        for (i in boundedIndex + 1 until entries.size) {
-            val path = entries[i]
-            if (path != primaryPath) {
-                ordered.add(path)
+        data class Entry(val url: String, val title: String?)
+        val items = entries.mapIndexed { index, url ->
+            Entry(url, titles?.getOrNull(index))
+        }
+
+        val ordered = ArrayList<Entry>(entries.size - 1)
+        for (i in boundedIndex + 1 until items.size) {
+            val entry = items[i]
+            if (entry.url != primaryPath) {
+                ordered.add(entry)
             }
         }
         for (i in 0 until boundedIndex) {
-            val path = entries[i]
-            if (path != primaryPath) {
-                ordered.add(path)
+            val entry = items[i]
+            if (entry.url != primaryPath) {
+                ordered.add(entry)
             }
         }
 
-        ordered
-            .distinct()
-            .forEach { MPVLib.command(arrayOf("loadfile", it, "append")) }
+        ordered.forEach { entry ->
+            val args = mutableListOf("loadfile", entry.url, "append")
+            entry.title?.takeIf { it.isNotEmpty() }?.let { args.add("force-media-title=$it") }
+            MPVLib.command(args.toTypedArray())
+        }
 
         intent.removeExtra("playlist")
         intent.removeExtra("playlist-start-index")
+        intent.removeExtra("playlist-titles")
+        intent.removeExtra("playlist-subs")
+        intent.removeExtra("playlist-subs-enable")
     }
 
     // Intent/Uri parsing
@@ -1086,6 +1101,7 @@ class MPVActivity : AppCompatActivity(), MPVLib.EventObserver, TouchGesturesObse
 
     private fun parseIntentExtras(extras: Bundle?) {
         onloadCommands.clear()
+        playlistSubtitleConfig = emptyMap()
         if (extras == null)
             return
 
@@ -1107,6 +1123,17 @@ class MPVActivity : AppCompatActivity(), MPVLib.EventObserver, TouchGesturesObse
                 Log.v(TAG, "Adding subtitles from intent extras: $subfile")
                 onloadCommands.add(arrayOf("sub-add", subfile, flag))
             }
+        }
+        extras.getBundle("playlist-subs")?.let { subsBundle ->
+            val enableBundle = extras.getBundle("playlist-subs-enable")
+            val map = mutableMapOf<String, SubtitleConfig>()
+            for (key in subsBundle.keySet()) {
+                val urls = subsBundle.getStringArrayList(key)?.toList().orEmpty()
+                if (urls.isEmpty()) continue
+                val enabled = enableBundle?.getStringArrayList(key)?.toSet().orEmpty()
+                map[key] = SubtitleConfig(urls, enabled)
+            }
+            playlistSubtitleConfig = map
         }
         extras.getInt("position", 0).let {
             if (it > 0)
@@ -1933,6 +1960,17 @@ class MPVActivity : AppCompatActivity(), MPVLib.EventObserver, TouchGesturesObse
         eventUiHandler.post { eventPropertyUi(property, value, metaUpdated) }
     }
 
+    private fun loadSubtitlesForCurrentFile() {
+        if (playlistSubtitleConfig.isEmpty())
+            return
+        val path = MPVLib.getPropertyString("path") ?: return
+        val config = playlistSubtitleConfig[path] ?: return
+        for (url in config.urls) {
+            val mode = if (config.enabled.contains(url)) "select" else "auto"
+            MPVLib.command(arrayOf("sub-add", url, mode))
+        }
+    }
+
     override fun event(eventId: Int) {
         if (eventId == MpvEvent.MPV_EVENT_SHUTDOWN)
             finishWithResult(if (playbackHasStarted) RESULT_OK else RESULT_CANCELED)
@@ -1940,6 +1978,7 @@ class MPVActivity : AppCompatActivity(), MPVLib.EventObserver, TouchGesturesObse
         if (eventId == MpvEvent.MPV_EVENT_START_FILE) {
             for (c in onloadCommands)
                 MPVLib.command(c)
+            loadSubtitlesForCurrentFile()
             if (this.statsLuaMode > 0 && !playbackHasStarted) {
                 MPVLib.command(arrayOf("script-binding", "stats/display-page-${this.statsLuaMode}-toggle"))
             }

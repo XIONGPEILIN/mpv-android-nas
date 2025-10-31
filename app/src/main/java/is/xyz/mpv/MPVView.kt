@@ -13,6 +13,7 @@ import `is`.xyz.mpv.MPVLib.MpvFormat.MPV_FORMAT_FLAG
 import `is`.xyz.mpv.MPVLib.MpvFormat.MPV_FORMAT_INT64
 import `is`.xyz.mpv.MPVLib.MpvFormat.MPV_FORMAT_NONE
 import `is`.xyz.mpv.MPVLib.MpvFormat.MPV_FORMAT_STRING
+import `is`.xyz.mpv.network.SmbHttpProxy
 import kotlin.reflect.KProperty
 
 internal class MPVView(context: Context, attrs: AttributeSet) : BaseMPVView(context, attrs) {
@@ -255,7 +256,10 @@ internal class MPVView(context: Context, attrs: AttributeSet) : BaseMPVView(cont
         val count = MPVLib.getPropertyInt("playlist-count")!!
         for (i in 0 until count) {
             val filename = MPVLib.getPropertyString("playlist/$i/filename")!!
-            val title = MPVLib.getPropertyString("playlist/$i/title")
+            var title = MPVLib.getPropertyString("playlist/$i/title")
+            if (title.isNullOrEmpty()) {
+                SmbHttpProxy.resolveDisplayName(filename)?.let { title = it }
+            }
             playlist.add(PlaylistItem(index=i, filename=filename, title=title))
         }
         return playlist
