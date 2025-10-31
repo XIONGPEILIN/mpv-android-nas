@@ -247,6 +247,7 @@ class MPVActivity : AppCompatActivity(), MPVLib.EventObserver, TouchGesturesObse
         val enabled: Set<String>
     )
     private var playlistSubtitleConfig: Map<String, SubtitleConfig> = emptyMap()
+    private var playlistTitles = mutableMapOf<String, String>()
 
     // Activity lifetime
 
@@ -301,6 +302,8 @@ class MPVActivity : AppCompatActivity(), MPVLib.EventObserver, TouchGesturesObse
 
         player.addObserver(this)
         player.initialize(filesDir.path, cacheDir.path)
+        // Enable playlist looping by default
+        MPVLib.setPropertyString("loop-playlist", "yes")
         player.playFile(filepath)
         // Save intent and filepath for playlist enqueueing in event handler
         pendingIntent = intent
@@ -1024,6 +1027,14 @@ class MPVActivity : AppCompatActivity(), MPVLib.EventObserver, TouchGesturesObse
             Entry(url, titles?.getOrNull(index))
         }
 
+        // Save titles for later use
+        playlistTitles.clear()
+        items.forEach { entry ->
+            entry.title?.let { title ->
+                playlistTitles[entry.url] = title
+            }
+        }
+
         val ordered = ArrayList<Entry>(entries.size - 1)
         for (i in boundedIndex + 1 until items.size) {
             val entry = items[i]
@@ -1646,6 +1657,13 @@ class MPVActivity : AppCompatActivity(), MPVLib.EventObserver, TouchGesturesObse
     }
 
     private fun updateMetadataDisplay() {
+        // Update media title to match playlist title
+        val currentUrl = MPVLib.getPropertyString("path")
+        val title = playlistTitles[currentUrl]
+        if (title != null) {
+            MPVLib.setPropertyString("force-media-title", title)
+        }
+
         if (!useAudioUI) {
             if (showMediaTitle)
                 binding.fullTitleTextView.text = psc.meta.formatTitle()
@@ -1707,6 +1725,8 @@ class MPVActivity : AppCompatActivity(), MPVLib.EventObserver, TouchGesturesObse
         val plCount = psc.playlistCount
         val plPos = psc.playlistPos
 
+        Log.d("MPVActivity", "plPos: $plPos, plCount: $plCount")
+
         if (!useAudioUI && plCount == 1) {
             // use View.GONE so the buttons won't take up any space
             binding.prevBtn.visibility = View.GONE
@@ -1718,8 +1738,9 @@ class MPVActivity : AppCompatActivity(), MPVLib.EventObserver, TouchGesturesObse
 
         val g = ContextCompat.getColor(this, R.color.tint_disabled)
         val w = ContextCompat.getColor(this, R.color.tint_normal)
-        binding.prevBtn.imageTintList = ColorStateList.valueOf(if (plPos == 0) g else w)
-        binding.nextBtn.imageTintList = ColorStateList.valueOf(if (plPos == plCount-1) g else w)
+        val loopPlaylist = player.getRepeat() == 1
+        binding.prevBtn.imageTintList = ColorStateList.valueOf(if (loopPlaylist || plPos > 0) w else g)
+        binding.nextBtn.imageTintList = ColorStateList.valueOf(if (loopPlaylist || plPos < plCount-1) w else g)
     }
 
     private fun updateOrientation(initial: Boolean = false) {
@@ -1982,14 +2003,13 @@ class MPVActivity : AppCompatActivity(), MPVLib.EventObserver, TouchGesturesObse
             for (c in onloadCommands)
                 MPVLib.command(c)
             loadSubtitlesForCurrentFile()
-            if (this.statsLuaMode > 0 && !playbackHasStarted) {
-                MPVLib.command(arrayOf("script-binding", "stats/display-page-${this.statsLuaMode}-toggle"))
+            // Set title for current file
+            val currentPath = MPVLib.getPropertyString("path")
+            currentPath?.let { path ->
+                playlistTitles[path]?.let { title ->
+                    MPVLib.setPropertyString("force-media-title", title)
+                }
             }
-
-            playbackHasStarted = true
-        }
-
-        if (eventId == MpvEvent.MPV_EVENT_FILE_LOADED) {
             // Enqueue playlist after file has loaded
             pendingIntent?.let { intent ->
                 pendingFilepath?.let { filepath ->
@@ -1998,6 +2018,15 @@ class MPVActivity : AppCompatActivity(), MPVLib.EventObserver, TouchGesturesObse
                     pendingFilepath = null
                 }
             }
+            if (this.statsLuaMode > 0 && !playbackHasStarted) {
+                MPVLib.command(arrayOf("script-binding", "stats/display-page-${this.statsLuaMode}-toggle"))
+            }
+
+            playbackHasStarted = true
+        }
+
+        if (eventId == MpvEvent.MPV_EVENT_FILE_LOADED) {
+            // File loaded
         }
 
         if (!activityIsForeground) return

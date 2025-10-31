@@ -10,3 +10,4 @@ build
 local.properties
 *~
 app/src/main/jniLibs/
+*.salive

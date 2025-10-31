@@ -49,11 +49,13 @@ internal class PlaylistDialog(private val player: MPVView) {
     }
 
     fun refresh() {
-        selectedIndex = MPVLib.getPropertyInt("playlist-pos") ?: -1
-        playlist = player.loadPlaylist()
+        val originalSelected = MPVLib.getPropertyInt("playlist-pos") ?: -1
+        val unsorted = player.loadPlaylist()
+        playlist = unsorted.sortedBy { it.title?.lowercase() }
+        selectedIndex = playlist.indexOfFirst { it.index == originalSelected }
         Log.v(TAG, "PlaylistDialog: loaded ${playlist.size} items")
         binding.list.adapter!!.notifyDataSetChanged()
-        binding.list.scrollToPosition(playlist.indexOfFirst { it.index == selectedIndex })
+        binding.list.scrollToPosition(selectedIndex)
 
         /*
          * At least on api 33 there is in some cases a (reproducible) bug, where the space below the

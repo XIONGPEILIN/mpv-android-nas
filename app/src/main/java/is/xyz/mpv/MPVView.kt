@@ -259,12 +259,12 @@ internal class MPVView(context: Context, attrs: AttributeSet) : BaseMPVView(cont
         val count = MPVLib.getPropertyInt("playlist-count")!!
         for (i in 0 until count) {
             val filename = MPVLib.getPropertyString("playlist/$i/filename")!!
-            var title = MPVLib.getPropertyString("playlist/$i/title")
-            if (title.isNullOrEmpty()) {
-                SmbHttpProxy.resolveDisplayName(filename)?.let { title = it }
-            }
+            val title = SmbHttpProxy.resolveDisplayName(filename) ?: filename
             playlist.add(PlaylistItem(index=i, filename=filename, title=title))
         }
+        // Sort playlist by title for consistent ordering
+        playlist.sortBy { it.title?.lowercase() }
+        Log.d("MPVView", "Playlist titles: ${playlist.map { it.title }}")
         return playlist
     }
 
